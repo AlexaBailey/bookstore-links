@@ -1,0 +1,9 @@
+id,name
+1,Classics
+2,Dystopian
+3,Historical
+4,Mystery
+5,Fantasy
+6,Young Adult
+7,Philosophical
+8,Science

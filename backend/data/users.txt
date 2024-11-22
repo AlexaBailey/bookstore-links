@@ -1,0 +1,3 @@
+id,username,password
+31,alexaserko,$2b$10$ITm7tfgBV/pcyAPrCfP5hOUYEjVhMq1R9jKVatgwhAWyTrESPcefW
+32,lerapechko,$2b$10$GVT9oCLtrWo5K8dIL59MBONA3i3a6l0MsCsvMPcBSwlyIGLvVewYm

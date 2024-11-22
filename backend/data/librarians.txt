@@ -1,0 +1,3 @@
+id,name,surname,section,experience,userId
+41,Alexa,Serko,Science,10,31
+42,Lera,Pechko,Historical,15,32
