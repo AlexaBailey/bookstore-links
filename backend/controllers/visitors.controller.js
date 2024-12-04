@@ -4,7 +4,7 @@ export const getVisitors = async (req, res) => {
   const { query } = req.query;
   try {
     const visitors = await readTxtFileAsJson("visitors.txt");
-    
+
     const filteredVisitors = query
       ? visitors.filter((visitor) =>
           visitor.name.toLowerCase().includes(query.toLowerCase())

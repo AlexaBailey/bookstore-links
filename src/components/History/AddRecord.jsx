@@ -19,8 +19,8 @@ const AddRecordDialog = ({ refetch }) => {
   const [newRecord, setNewRecord] = useState({
     visitorId: "",
     bookId: "",
-    librarianId: Number(user),
-    borrowDate: "",
+    librarianId: Number(user.id),
+    borrow_date: "",
   });
 
   const [borrowBook] = useBorrowBookMutation();
@@ -31,8 +31,8 @@ const AddRecordDialog = ({ refetch }) => {
     setNewRecord({
       visitorId: "",
       bookId: "",
-      librarianId: Number(user),
-      borrowDate: "",
+      librarianId: Number(user.id),
+      borrow_date: "",
     });
     setVisitorQuery("");
     setBookQuery("");
@@ -158,9 +158,9 @@ const AddRecordDialog = ({ refetch }) => {
                 <label className="block text-sm font-medium">Borrow Date</label>
                 <input
                   type="date"
-                  value={newRecord.borrowDate}
+                  value={newRecord.borrow_date}
                   onChange={(e) =>
-                    setNewRecord({ ...newRecord, borrowDate: e.target.value })
+                    setNewRecord({ ...newRecord, borrow_date: e.target.value })
                   }
                   className="w-full p-2 border rounded"
                 />

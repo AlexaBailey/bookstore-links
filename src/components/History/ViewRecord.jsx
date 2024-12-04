@@ -18,6 +18,7 @@ export default function ViewRecord({
       });
       toast.success("Book marked as returned!");
       refetch();
+      setIsDialogOpen(false);
     } catch (error) {
       toast.error("Failed to mark book as returned.");
     }
@@ -39,16 +40,16 @@ export default function ViewRecord({
               </Dialog.Title>
               <div className="mb-4">
                 <p>
-                  <strong>Visitor:</strong> {selectedRecord.visitorId}
+                  <strong>Visitor:</strong> {selectedRecord.visitor.name}
                 </p>
                 <p>
                   <strong>Book:</strong> {selectedRecord.book?.title}
                 </p>
                 <p>
-                  <strong>Librarian:</strong> {selectedRecord.librarianId}
+                  <strong>Librarian:</strong> {selectedRecord.librarian.name}
                 </p>
                 <p>
-                  <strong>Borrow Date:</strong> {selectedRecord.borrowDate}
+                  <strong>Borrow Date:</strong> {selectedRecord.borrow_date}
                 </p>
                 <p>
                   <strong>Return Date:</strong>{" "}

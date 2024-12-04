@@ -10,6 +10,7 @@ export const booksApi = createApi({
     }),
     fetchLazyBooks: builder.query({
       query: (searchQuery) => `/books?query=${encodeURIComponent(searchQuery)}`,
+      keepUnusedDataFor: 0, // Disable caching
     }),
     fetchBorrowedBooks: builder.query({
       query: () => "/books/borrowed-books",
@@ -21,13 +22,19 @@ export const booksApi = createApi({
 
     fetchUserBorrowHistory: builder.query({
       query: (name) => `/books/borrow-history/${name}`,
+      providesTags: ["BooksHistory"],
     }),
 
     borrowBook: builder.mutation({
-      query: ({ visitorId, bookId, librarianId, borrowDate }) => ({
+      query: ({ visitorId, bookId, librarianId, borrow_date }) => ({
         url: "/books/borrow",
         method: "POST",
-        body: { visitorId, bookId, librarianId, borrowDate },
+        body: {
+          visitors: { visitorId, tableName: "visitors" },
+          book: { bookId, tableName: "books" },
+          librarian: { librarianId, tableName: "librarians" },
+          borrow_date,
+        },
       }),
     }),
 
@@ -35,8 +42,9 @@ export const booksApi = createApi({
       query: ({ recordId, returnDate }) => ({
         url: "/books/return",
         method: "POST",
-        body: { recordId, returnDate },
+        body: { recordId, tableName: "borrowed_books", returnDate },
       }),
+      invalidatesTags: ["BooksHistory"],
     }),
   }),
 });

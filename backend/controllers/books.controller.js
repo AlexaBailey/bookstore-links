@@ -1,31 +1,23 @@
 import { readTxtFileAsJson, saveJsonToTxtFile } from "../helpers/convert.js";
+import Link from "../helpers/Link.class.js";
+
 export const getBooks = async (req, res) => {
   const { limit = 10, page = 0, category, query = "" } = req.query;
 
   try {
-    const books = await readTxtFileAsJson("books.txt");
     const bookCategories = await readTxtFileAsJson("book_category.txt");
-    const categories = await readTxtFileAsJson("categories.txt");
 
-    const categoryMap = categories.reduce((acc, cat) => {
-      acc[Number(cat.id)] = cat.name;
-      return acc;
-    }, {});
+    const booksWithCategories = await Promise.all(
+      bookCategories.map(async (entry) => {
+        const book = await new Link(entry.book_id).resolveLink();
+        const category = await new Link(entry.category_id).resolveLink();
 
-    const booksWithCategories = books.map((book) => {
-      const bookCategoryIds = bookCategories
-        .filter((bc) => Number(bc.book_id) === Number(book.id))
-        .map((bc) => Number(bc.category_id));
-
-      const bookCategoryNames = bookCategoryIds.map(
-        (categoryId) => categoryMap[categoryId]
-      );
-
-      return {
-        ...book,
-        categories: bookCategoryNames,
-      };
-    });
+        return {
+          ...book,
+          categories: [category.name],
+        };
+      })
+    );
 
     let filteredBooks = booksWithCategories;
 
@@ -36,8 +28,10 @@ export const getBooks = async (req, res) => {
     }
 
     if (query) {
-      filteredBooks = filteredBooks.filter((book) =>
-        book.title.toLowerCase().includes(query.toLowerCase())
+      filteredBooks = filteredBooks.filter(
+        (book) =>
+          typeof book.title === "string" &&
+          book.title.toLowerCase().includes(query.toLowerCase())
       );
     }
 
@@ -54,6 +48,7 @@ export const getBooks = async (req, res) => {
       limit: parseInt(limit, 10),
     });
   } catch (error) {
+    console.error("Error fetching books:", error);
     res.status(500).json({ message: "Error fetching books" });
   }
 };
@@ -61,89 +56,89 @@ export const getBooks = async (req, res) => {
 export const getAllBorrowedBooks = async (req, res) => {
   try {
     const borrowedBooks = await readTxtFileAsJson("borrowed_books.txt");
-    const books = await readTxtFileAsJson("books.txt");
 
-    const allBorrowedBooks = borrowedBooks.map((record) => ({
-      ...record,
-      book: books.find((b) => b.id === record.bookId),
-    }));
+    const allBorrowedBooks = await Promise.all(
+      borrowedBooks.map(async (record) => ({
+        ...record,
+        book: await new Link(record.book).resolveLink(),
+        visitor: await new Link(record.visitor).resolveLink(),
+        librarian: await new Link(record.librarian).resolveLink(),
+      }))
+    );
 
     res.json(allBorrowedBooks);
   } catch (error) {
     res.status(500).json({ message: "Error fetching all borrowed books" });
   }
 };
+
 export const borrowBook = async (req, res) => {
-  const { visitorId, bookId, librarianId, borrowDate } = req.body;
+  const {
+    visitors: { visitorId, tableName: visitorTableName },
+    book: { bookId, tableName: bookTableName },
+    librarian: { librarianId, tableName: librarianTableName } = {},
+    borrow_date,
+  } = req.body;
 
   try {
-    if (!visitorId || !bookId || !librarianId || !borrowDate) {
+    if (!visitorId || !bookId || !librarianId || !borrow_date) {
       return res.status(400).json({ message: "All fields are required." });
     }
 
-    const books = await readTxtFileAsJson("books.txt");
-    const bookCategories = await readTxtFileAsJson("book_category.txt");
-    const categories = await readTxtFileAsJson("categories.txt");
-    const librarians = await readTxtFileAsJson("librarians.txt");
-    const librarianSchedules = await readTxtFileAsJson(
-      "librarian_schedule.txt"
+    const visitorLink = await Link.formatLinkById(visitorTableName, visitorId);
+    const bookLink = await Link.formatLinkById(bookTableName, bookId);
+    const librarianLink = await Link.formatLinkById(
+      librarianTableName,
+      librarianId
     );
-    const borrowedBooks = await readTxtFileAsJson("borrowed_books.txt");
 
-    const book = books.find((b) => b.id == bookId);
-    if (!book) {
-      return res.status(404).json({ message: "Book not found." });
-    }
+    const bookCategories = await readTxtFileAsJson("book_category.txt");
 
-    const bookCategoryIds = bookCategories
-      .filter((entry) => entry.book_id == bookId)
-      .map((entry) => parseInt(entry.category_id, 10));
+    const categoryLinks = bookCategories
+      .filter((bc) => bc.book_id === bookLink)
+      .map((bc) => bc.category_id);
 
-    if (!bookCategoryIds.length) {
-      return res
-        .status(404)
-        .json({ message: "No categories found for the book." });
-    }
+    const categories = await Promise.all(
+      categoryLinks.map(async (categoryLink) => {
+        const category = await new Link(categoryLink).resolveLink();
+        return category.name;
+      })
+    );
 
-    const bookCategoryNames = categories
-      .filter((cat) => bookCategoryIds.includes(parseInt(cat.id, 10)))
-      .map((cat) => cat.name);
+    const librarian = await new Link(librarianLink).resolveLink();
 
-    if (!bookCategoryNames.length) {
-      return res
-        .status(404)
-        .json({ message: "Book has categories, but their names are missing." });
-    }
-
-    const librarian = librarians.find((l) => l.userId == librarianId);
-    if (!librarian) {
-      return res.status(404).json({ message: "Librarian not found." });
-    }
-
-    if (!bookCategoryNames.includes(librarian.section)) {
+    if (!categories.includes(librarian.section)) {
       return res.status(400).json({
-        message: `Librarian's section '${librarian.section}' does not align with the book's categories: ${bookCategoryNames.join(
+        message: `Librarian's section (${librarian.section}) does not match the book's category (${categories.join(
           ", "
-        )}.`,
+        )}).`,
       });
     }
 
-    const librarianSchedule = librarianSchedules.find(
-      (ls) => ls.librarianId == librarian.id
+    const librarianSchedules = await readTxtFileAsJson(
+      "librarian_schedule.txt"
     );
-    const borrowDay = new Date(borrowDate).toLocaleString("en-US", {
+    const librarianScheduleEntry = librarianSchedules.find(
+      (ls) => ls.librarianId === librarianLink
+    );
+
+    if (!librarianScheduleEntry) {
+      return res.status(400).json({ message: "Librarian schedule not found." });
+    }
+
+    const borrowDay = new Date(borrow_date).toLocaleString("en-US", {
       weekday: "long",
     });
 
-    if (!librarianSchedule?.schedule.includes(borrowDay)) {
+    if (!librarianScheduleEntry?.schedule.includes(borrowDay)) {
       return res.status(400).json({
         message: `Librarian is not scheduled to work on ${borrowDay}.`,
       });
     }
-
+    const borrowedBooks = await readTxtFileAsJson("borrowed_books.txt");
     if (
       borrowedBooks.some(
-        (record) => record.bookId == bookId && !record.returnDate
+        (record) => record.book === bookLink && !record.return_date
       )
     ) {
       return res.status(400).json({ message: "Book is already borrowed." });
@@ -151,11 +146,11 @@ export const borrowBook = async (req, res) => {
 
     borrowedBooks.push({
       id: borrowedBooks.length + 1,
-      visitorId,
-      bookId,
-      librarianId: librarian.id,
-      borrowDate,
-      returnDate: null,
+      visitor: visitorLink,
+      book: bookLink,
+      librarian: librarianLink,
+      borrow_date,
+      return_date: null,
     });
 
     await saveJsonToTxtFile("borrowed_books.txt", borrowedBooks);
@@ -163,43 +158,49 @@ export const borrowBook = async (req, res) => {
     res.status(201).json({ message: "Book borrowed successfully." });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Error borrowing book." });
+    res
+      .status(500)
+      .json({ message: "Error borrowing book.", error: error.message });
   }
 };
 
 export const returnBook = async (req, res) => {
-  const { recordId, returnDate } = req.body;
+  const { recordId, returnDate, tableName = "borrowed_books" } = req.body;
 
   try {
-    const borrowedBooks = await readTxtFileAsJson("borrowed_books.txt");
+    const borrowedBooks = await readTxtFileAsJson(`${tableName}.txt`);
 
-    const record = borrowedBooks.find(
-      (b) => b.id === recordId && !b.returnDate
-    );
-    if (!record)
-      return res.status(404).json({ message: "Borrow record not found" });
+    const record = borrowedBooks.find((entry) => entry.id === recordId);
+    if (!record) {
+      return res.status(404).json({ message: "Borrow record not found." });
+    }
 
-    record.returnDate = returnDate;
+    record.return_date = returnDate;
 
-    await saveJsonToTxtFile("borrowed_books.txt", borrowedBooks);
+    await saveJsonToTxtFile(`${tableName}.txt`, borrowedBooks);
 
-    res.status(200).json({ message: "Book returned successfully" });
+    res.status(200).json({ message: "Book returned successfully.", record });
   } catch (error) {
-    res.status(500).json({ message: "Error returning book" });
+    res
+      .status(500)
+      .json({ message: "Error returning book.", error: error.message });
   }
 };
 
 export const getCurrentBorrowedBooks = async (req, res) => {
   try {
     const borrowedBooks = await readTxtFileAsJson("borrowed_books.txt");
-    const books = await readTxtFileAsJson("books.txt");
 
-    const currentBorrowed = borrowedBooks
-      .filter((record) => !record.returnDate)
-      .map((record) => ({
-        ...record,
-        book: books.find((b) => b.id === record.bookId),
-      }));
+    const currentBorrowed = await Promise.all(
+      borrowedBooks
+        .filter((record) => !record.return_date)
+        .map(async (record) => ({
+          ...record,
+          book: await new Link(record.book).resolveLink(),
+          visitor: await new Link(record.visitor).resolveLink(),
+          librarian: await new Link(record.librarian).resolveLink(),
+        }))
+    );
 
     res.json(currentBorrowed);
   } catch (error) {
@@ -212,28 +213,31 @@ export const getVisitorBorrowHistory = async (req, res) => {
 
   try {
     const visitors = await readTxtFileAsJson("visitors.txt");
+    const visitor = visitors.find((v) => v.name == name);
+
+    const visitorLink = await Link.formatLinkById("visitors", visitor.id);
+
     const borrowedBooks = await readTxtFileAsJson("borrowed_books.txt");
-    const books = await readTxtFileAsJson("books.txt");
+    const visitorHistory = await Promise.all(
+      borrowedBooks.map(async (record) => {
+        if (record.visitor !== visitorLink) return null;
 
-    const visitor = visitors.find(
-      (v) => v.name.toLowerCase() === name.toLowerCase()
+        const book = await new Link(record.book).resolveLink();
+        const librarian = await new Link(record.librarian).resolveLink();
+
+        return {
+          ...record,
+          visitor,
+          book,
+          librarian,
+        };
+      })
     );
-    if (!visitor) {
-      return res.status(404).json({ message: "Visitor not found." });
-    }
 
-    const visitorId = visitor.id;
+    const filteredHistory = visitorHistory.filter((record) => record !== null);
 
-    const visitorHistory = borrowedBooks
-      .filter((record) => record.visitorId === visitorId)
-      .map((record) => ({
-        ...record,
-        book: books.find((b) => b.id === record.bookId),
-      }));
-
-    res.json(visitorHistory);
+    res.json(filteredHistory);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ message: "Error fetching visitor borrow history." });
   }
 };

@@ -1,3 +1,3 @@
 librarianId,schedule
-41,Tuesday|Wednesday
-42,Monday|Tuesday|Friday
+${librarians/1/id},Tuesday|Wednesday
+${librarians/2/id},Monday|Tuesday|Friday

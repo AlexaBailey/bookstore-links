@@ -7,6 +7,7 @@ import { useLoginMutation } from "../store/slices/api/authApi";
 import { setAuthState } from "../store/slices/auth";
 import { useDispatch } from "react-redux";
 import { toast } from "react-toastify";
+import { getUserFromToken } from "../helpers/auth";
 
 const loginSchema = yup.object().shape({
   username: yup
@@ -39,9 +40,10 @@ const LoginPage = () => {
   const onSubmit = async (data) => {
     try {
       const response = await login(data).unwrap();
-      const { token, user } = response;
+      const { token } = response;
       localStorage.setItem("authToken", token);
-      dispatch(setAuthState({ token, user }));
+      const user = getUserFromToken(token);
+      dispatch(setAuthState({ token, user: user }));
       toast.success("Login successful!");
       navigate("/dashboard");
     } catch (error) {
